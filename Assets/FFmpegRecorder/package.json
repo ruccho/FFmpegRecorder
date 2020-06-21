@@ -1,0 +1,15 @@
+{
+    "name": "io.github.ruccho.ffmpegrecorder",
+    "version": "0.1.0",
+    "displayName": "FFmpeg Recorder",
+    "description": "FFmpeg imtegration for Unity Recorder",
+    "unity": "2018.4",
+    "dependencies": {
+        "com.unity.recorder": "2.1.0-preview.1"
+   },
+    "author": {
+      "name": "ruccho",
+      "url": "https://ruccho.github.io/"
+    }
+  }
+  
