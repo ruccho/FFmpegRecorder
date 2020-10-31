@@ -28,7 +28,7 @@ namespace Ruccho.FFmpegRecorder
         public string AudioCodec => audioCodec;
         [SerializeField] private string audioCodec;
         public int VideoBitrate => videoBitrate;
-        [SerializeField] private int videoBitrate = 12000000;
+        [SerializeField] private int videoBitrate = 0;
         public string VideoArguments => videoArguments;
         [SerializeField] private string videoArguments;
         public string AudioArguments => audioArguments;

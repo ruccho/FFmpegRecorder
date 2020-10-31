@@ -2,6 +2,8 @@
 
 Extension for Unity Recorder that provides output through FFmpeg.
 
+![image](https://pbs.twimg.com/media/ETFD78_UEAAdi7l?format=jpg&name=4096x4096)
+
 ## Requirements
 
 - Unity 2018.4+
@@ -10,9 +12,31 @@ Extension for Unity Recorder that provides output through FFmpeg.
 
 ## Installation
 
+This package is provided through Git dependencies feature of Unity Package Manager.
+
 1. Preapare FFmpeg executable on your computer.
-2. Install **Unity Recorder** package from Package Manager.
-3. Import [FFmpegRecorder.unitypackage](https://github.com/ruccho/FFmpegRecorder/releases) to your project.
+2. Open your project.
+
+(In Unity 2019.3+)
+
+3. Open Package Manager Window and click "+" button and "Add package from git URL..."
+4. Enter "https://github.com/ruccho/FFmpegRecorder.git?path=/Packages/io.github.ruccho.ffmpegrecorder"
+
+(In Unity ~2019.2)
+
+3. Open Packages/manifest.json
+4. Add dependencies entry:
+```json:manifest.json
+{
+  "dependencies": {
+      ...
+      "io.github.ruccho.ffmpegrecorder": "https://github.com/ruccho/FFmpegRecorder.git?path=/Packages/io.github.ruccho.ffmpegrecorder"
+      ...
+  }
+}
+```
+
+
 
 ## Usage
 
