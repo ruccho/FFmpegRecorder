@@ -1,13 +1,10 @@
 {
-    "name": "io.github.ruccho.ffmpegrecorder",
+    "name": "Ruccho.FFmpegRecorder",
     "references": [
-        "Unity.Recorder",
         "Unity.Recorder.Editor"
     ],
     "optionalUnityReferences": [],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,

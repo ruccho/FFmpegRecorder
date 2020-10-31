@@ -1,0 +1,10 @@
+{
+    "name": "io.github.ruccho.ffmpegrecorder",
+    "version": "0.1.0",
+    "displayName": "FFmpeg Recorder",
+    "description": "An extension for Unity Recorder that enables recording through FFmpeg.",
+    "unity": "2018.4",
+    "dependencies": {
+        "com.unity.recorder": "2.4.0-preview.1"
+    }
+}

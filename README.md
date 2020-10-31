@@ -5,7 +5,7 @@ Extension for Unity Recorder that provides output through FFmpeg.
 ## Requirements
 
 - Unity 2018.4+
-- Tested with Unity Recoeder 2.1.0
+- Tested with Unity Recoeder 2.4.0
 - Tested on Windows
 
 ## Installation
@@ -17,6 +17,6 @@ Extension for Unity Recorder that provides output through FFmpeg.
 ## Usage
 
 1. Open **Recorder Window**.
-2. Click **Add New Recorders** and select **F Fmpeg**.
+2. Click **Add New Recorders** and select **FFmpeg**.
 3. Specify **Ffmpeg Executable Path** and **Extension**.
-4. (optional) Specify codecs, bitrate, and custom arguments. Keep them empty if you don't want to specify them.
+4. (optional) Specify codecs, bitrate, and custom arguments. Keep them empty (or 0) if you don't want to specify them.
