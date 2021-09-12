@@ -85,20 +85,6 @@ namespace Ruccho.FFmpegRecorder
 
             //Debug.Log(AudioInputMainBufferGet(this));
 
-
-#if UNITY_EDITOR_OSX
-            if (Settings.AudioInputSettings.PreserveAudio)
-            {
-                // Special case with WebM and audio on older Apple computers: deactivate async GPU readback because there
-                // is a risk of not respecting the WebM standard and receiving audio frames out of sync (see "monotonically
-                // increasing timestamps"). This happens only with Target Cameras.
-                if (m_Inputs[0].settings is CameraInputSettings && Settings.OutputFormat == VideoRecorderOutputFormat.WebM)
-                {
-                    UseAsyncGPUReadback = false;
-                }
-            }
-#endif
-
             try
             {
                 AbsoluteFilename = Settings.FileNameGenerator.BuildAbsolutePath(session);
