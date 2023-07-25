@@ -1,16 +1,24 @@
 {
     "name": "Ruccho.FFmpegRecorder",
+    "rootNamespace": "Ruccho.FFmpegRecorder",
     "references": [
-        "Unity.Recorder.Editor"
+        "GUID:847b179520b009e4c8d15c296b1cbf35"
     ],
-    "optionalUnityReferences": [],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "includePlatforms": [],
     "excludePlatforms": [],
-    "allowUnsafeCode": false,
+    "allowUnsafeCode": true,
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": []
+    "defineConstraints": [
+        "UNITY_EDITOR"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.recorder",
+            "expression": "4.0.0",
+            "define": "UNITY_RECORDER_4_OR_NEWER"
+        }
+    ],
+    "noEngineReferences": false
 }

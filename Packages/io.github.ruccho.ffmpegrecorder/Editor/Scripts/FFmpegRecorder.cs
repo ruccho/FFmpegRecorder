@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq.Expressions;
 using System.Threading;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEditor.Media;
 using UnityEditor.Recorder;
 using UnityEditor.Recorder.Input;
@@ -18,10 +19,68 @@ namespace Ruccho.FFmpegRecorder
     {
         protected override TextureFormat ReadbackTextureFormat => TextureFormat.RGBA32;
 
-        private Func<FFmpegRecorder, NativeArray<float>> AudioInputMainBufferGet { get; set; }
         private string AbsoluteFilename { get; set; }
 
-        public RecorderInput audioInput => m_Inputs[1];
+#if UNITY_RECORDER_4_OR_NEWER
+        public AudioInput AudioInput => m_Inputs[1] as AudioInput ??
+                                        throw new InvalidOperationException("Failed to get AudioInput instance.");
+#else
+        public RecorderInput AudioInput => m_Inputs[1];
+#endif
+
+        private NativeArray<float> tempAudioBuffer;
+
+        private void GetAudioBuffer(ref NativeArray<float> userArray, out int writtenSize)
+        {
+#if UNITY_RECORDER_4_OR_NEWER
+            AudioInput.GetBuffer(ref userArray, out writtenSize);
+#else
+            WarmupAudioBufferAccess();
+            var buff = AudioInputMainBufferGet(AudioInput);
+            if (userArray.Length < buff.Length)
+                throw new ArgumentException(
+                    $"The supplied array (size {userArray.Length}) must be larger than or of the same size as the audio sample buffer (size {buff.Length})");
+
+            userArray.GetSubArray(0, buff.Length).CopyFrom(buff);
+            writtenSize = buff.Length;
+#endif
+        }
+
+        private int GetAudioBufferSize()
+        {
+#if UNITY_RECORDER_4_OR_NEWER
+            return AudioInput.GetBufferSize();
+#else
+            WarmupAudioBufferAccess();
+            return AudioInputMainBufferGet(AudioInput).Length;
+#endif
+        }
+
+#if !UNITY_RECORDER_4_OR_NEWER
+        private Func<RecorderInput, NativeArray<float>> AudioInputMainBufferGet { get; set; }
+#endif
+        private void WarmupAudioBufferAccess()
+        {
+#if !UNITY_RECORDER_4_OR_NEWER
+            if (AudioInputMainBufferGet != null) return;
+            
+            var audioInputType = typeof(Recorder).Assembly.GetType("UnityEditor.Recorder.Input.AudioInput");
+            if (audioInputType == null) throw new InvalidOperationException("AudioInput Type was not found.");
+            
+            var audioInputParameterEx = Expression.Parameter(typeof(RecorderInput), "audioInput");
+
+            var audioInputEx = Expression.TypeAs(audioInputParameterEx, audioInputType);
+
+            var audioInputMainBufferEx =
+                Expression.MakeMemberAccess(audioInputEx, audioInputType.GetProperty("mainBuffer"));
+
+            var audioInputMainBufferGetEx = Expression.Lambda<Func<RecorderInput, NativeArray<float>>>(
+                audioInputMainBufferEx, audioInputParameterEx);
+
+            AudioInputMainBufferGet = audioInputMainBufferGetEx.Compile();
+#endif
+        }
+
 
         protected override bool BeginRecording(RecordingSession session)
         {
@@ -54,43 +113,29 @@ namespace Ruccho.FFmpegRecorder
                 Debug.LogError(string.Format("FFmpegRecorder got invalid input resolution {0} x {1}.", width, height));
                 return false;
             }
-            
-            var audioAttrsList = new List<AudioTrackAttributes>();
 
-            var audioInputType = typeof(Recorder).Assembly.GetType("UnityEditor.Recorder.Input.AudioInput");
-            if (audioInputType == null)
-            {
-                Debug.LogError("AudioInput Type was not found.");
-                return false;
-            }
+            int audioInputSampleRate;
+            ushort audioInputChannelCount;
 
-            var audioInputSampleRate = (int) audioInputType.GetProperty("sampleRate").GetValue(audioInput);
-            var audioInputChannelCount = (ushort) audioInputType.GetProperty("channelCount").GetValue(audioInput);
+            // from Unity Recorder 4.0.0, AudioInput
 
-            //var audioInputParamEx = Expression.Parameter(audioInputType, "audioInput");
-            var ffmpegRecorderParamEx = Expression.Parameter(typeof(FFmpegRecorder), "ffmpegRecorder");
-            
-            var audioInputAsRecorderInputEx =
-                Expression.MakeMemberAccess(ffmpegRecorderParamEx, typeof(FFmpegRecorder).GetProperty("audioInput"));
+#if UNITY_RECORDER_4_OR_NEWER
+            audioInputSampleRate = AudioInput.SampleRate;
+            audioInputChannelCount = AudioInput.ChannelCount;
+#else
+            audioInputSampleRate = (int) audioInputType.GetProperty("sampleRate").GetValue(audioInput);
+            audioInputChannelCount = (ushort) audioInputType.GetProperty("channelCount").GetValue(audioInput);
+#endif
 
-            var audioInputEx = Expression.TypeAs(audioInputAsRecorderInputEx, audioInputType);
-            
-            var audioInputMainBufferEx =
-                Expression.MakeMemberAccess(audioInputEx, audioInputType.GetProperty("mainBuffer"));
-            
-            var audioInputMainBufferGetEx = Expression.Lambda<Func<FFmpegRecorder, NativeArray<float>>>(
-                audioInputMainBufferEx, ffmpegRecorderParamEx);
-            
-            AudioInputMainBufferGet = audioInputMainBufferGetEx.Compile();
-
-            //Debug.Log(AudioInputMainBufferGet(this));
+            WarmupAudioBufferAccess();
 
             try
             {
                 AbsoluteFilename = Settings.FileNameGenerator.BuildAbsolutePath(session);
                 bool mux = Settings.AudioInputSettings.PreserveAudio;
 
-                CreateVideoProcess(width, height, RationalFromDouble(session.settings.FrameRate), AbsoluteFilename, !mux);
+                CreateVideoProcess(width, height, RationalFromDouble(session.settings.FrameRate), AbsoluteFilename,
+                    !mux);
 
                 if (mux)
                 {
@@ -180,11 +225,10 @@ namespace Ruccho.FFmpegRecorder
             }
         }
 
-        //private float[] audioBuffer;
         protected override void RecordFrame(RecordingSession session)
         {
             base.RecordFrame(session);
-            
+
 
             bool mux = Settings.AudioInputSettings.PreserveAudio;
 
@@ -199,15 +243,40 @@ namespace Ruccho.FFmpegRecorder
 
             if (mux)
             {
-                var mainBuffer = AudioInputMainBufferGet(this);
-                
-                for (int i = 0; i < mainBuffer.Length; i++)
+                var length = GetAudioBufferSize();
+
+                if (!tempAudioBuffer.IsCreated || tempAudioBuffer.Length < length)
                 {
-                    var bytes = BitConverter.GetBytes(mainBuffer[i]);
+                    tempAudioBuffer = new NativeArray<float>(length, Allocator.Persistent);
+                }
+
+
+                GetAudioBuffer(ref tempAudioBuffer, out length);
+
+#if NET_STANDARD_2_1
+                // Use Span
+                ReadOnlySpan<float> tempAudioBufferSpan;
+#if UNITY_2022_2_OR_NEWER
+                // In Unity 2022.2 or newer, NativeArrays can be converted into spans.
+                tempAudioBufferSpan = tempAudioBuffer.AsReadOnlySpan().Slice(0, length);
+#else
+                unsafe
+                {
+                    tempAudioBufferSpan = new ReadOnlySpan<float>(tempAudioBuffer.GetUnsafePtr(), length);
+                }
+#endif
+                
+                audioProcess.StdIn.BaseStream.Write(System.Runtime.InteropServices.MemoryMarshal.AsBytes(tempAudioBufferSpan));
+#else
+                // Write each elements
+                for (int i = 0; i < length; i++)
+                {
+                    var bytes = BitConverter.GetBytes(tempAudioBuffer[i]);
                     audioProcess.StdIn.BaseStream.Write(bytes, 0, bytes.Length);
                 }
-                
+#endif
                 audioProcess.StdIn.BaseStream.Flush();
+
             }
         }
 
@@ -228,22 +297,23 @@ namespace Ruccho.FFmpegRecorder
 
             return null;
         }
+
         private void AbortRecording(RecordingSession session)
         {
             Debug.LogError("FFmpeg has exited.");
 
             var videoError = CloseProcess(videoProcess);
             if (!string.IsNullOrEmpty(videoError)) Debug.LogError("Video encoding process: " + videoError);
-            
+
             videoProcess?.Dispose();
             videoProcess = null;
-            
+
             var audioError = CloseProcess(videoProcess);
             if (!string.IsNullOrEmpty(videoError)) Debug.LogError("Video encoding process: " + audioError);
-            
+
             audioProcess?.Dispose();
             audioProcess = null;
-            
+
             session.Dispose();
         }
 
@@ -294,6 +364,8 @@ namespace Ruccho.FFmpegRecorder
                     };
                 }
                 
+                tempAudioBuffer.Dispose();
+
                 videoProcess?.Dispose();
                 audioProcess?.Dispose();
                 videoProcess = null;
@@ -319,13 +391,13 @@ namespace Ruccho.FFmpegRecorder
 
             const long precision = 10000000;
 
-            var gcd = GreatestCommonDivisor((long) Math.Round(frac * precision), precision);
+            var gcd = GreatestCommonDivisor((long)Math.Round(frac * precision), precision);
             var denom = precision / gcd;
 
             return new Rational()
             {
-                numerator = (int) ((long) integral * denom + ((long) Math.Round(frac * precision)) / gcd),
-                denominator = (int) denom
+                numerator = (int)((long)integral * denom + ((long)Math.Round(frac * precision)) / gcd),
+                denominator = (int)denom
             };
         }
 
