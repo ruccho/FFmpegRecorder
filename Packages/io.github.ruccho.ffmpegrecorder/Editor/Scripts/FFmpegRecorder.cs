@@ -1,12 +1,8 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq.Expressions;
 using System.Threading;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
-using UnityEditor.Media;
+using UnityEditor;
 using UnityEditor.Recorder;
 using UnityEditor.Recorder.Input;
 using UnityEngine;
@@ -132,7 +128,12 @@ namespace Ruccho.FFmpegRecorder
             try
             {
                 AbsoluteFilename = Settings.FileNameGenerator.BuildAbsolutePath(session);
-                bool mux = Settings.AudioInputSettings.PreserveAudio;
+                //Check project audioManager setting is disable(e g someproject using other audio system it will be disable)
+                //This prevent crash when CreateAudioProcess but audio setting is disabled.
+                var audioManager = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/AudioManager.asset")[0];
+                var serializedManager = new SerializedObject(audioManager);
+                var disableAudioProp = serializedManager.FindProperty("m_DisableAudio");
+                bool mux = Settings.AudioInputSettings.PreserveAudio || disableAudioProp.boolValue;
 
                 CreateVideoProcess(width, height, RationalFromDouble(session.settings.FrameRate), AbsoluteFilename,
                     !mux);
@@ -157,14 +158,18 @@ namespace Ruccho.FFmpegRecorder
             bool withoutMux = false)
         {
             videoProcess?.Dispose();
+            var videoBitrate = Settings.VideoBitrate <= 0
+                ? ""
+                : $" -b:v {Mathf.Clamp(Settings.VideoBitrate * 1000, 0, float.PositiveInfinity)}";
+            var videoCodec = string.IsNullOrEmpty(Settings.VideoCodec) ? "" : $" -c:v {Settings.VideoCodec}";
             videoProcess = new FFmpegHost(
                 Settings.FFmpegExecutablePath,
                 "-y -f rawvideo -vcodec rawvideo -pixel_format rgba"
                 + " -video_size " + width + "x" + height
-                + " -framerate " + frameRate.ToString()
+                + " -framerate " + frameRate
                 + " -loglevel error -i - " + "-pix_fmt yuv420p"
-                + (Settings.VideoBitrate <= 0 ? "" : $" -b:v {Settings.VideoBitrate}")
-                + (string.IsNullOrEmpty(Settings.VideoCodec) ? "" : $" -vcodec {Settings.VideoCodec}")
+                + videoBitrate
+                + videoCodec
                 + $" {Settings.VideoArguments}"
                 + (withoutMux ? $" \"{outputPath}\"" : $" \"{outputPath}_video.{Settings.OutputExtension}\""));
         }
@@ -174,11 +179,12 @@ namespace Ruccho.FFmpegRecorder
         private void CreateAudioProcess(string outputPath, int sampleRate, int channelCount)
         {
             audioProcess?.Dispose();
+            var audioCodec = string.IsNullOrEmpty(Settings.AudioCodec) ? "" : $" -acodec {Settings.AudioCodec}";
             audioProcess = new FFmpegHost(
                 Settings.FFmpegExecutablePath,
                 $"-y -f f32le -ar {sampleRate} -ac {channelCount}"
                 + " -loglevel error -i - "
-                + (string.IsNullOrEmpty(Settings.AudioCodec) ? "" : $" -acodec {Settings.AudioCodec}")
+                + audioCodec
                 + $" -ar {sampleRate} -ac {channelCount}"
                 + $" {Settings.AudioArguments}"
                 //+ $" -map 0:0 -f data"
@@ -276,7 +282,6 @@ namespace Ruccho.FFmpegRecorder
                 }
 #endif
                 audioProcess.StdIn.BaseStream.Flush();
-
             }
         }
 
@@ -363,7 +368,7 @@ namespace Ruccho.FFmpegRecorder
                         }, false);
                     };
                 }
-                
+
                 tempAudioBuffer.Dispose();
 
                 videoProcess?.Dispose();
